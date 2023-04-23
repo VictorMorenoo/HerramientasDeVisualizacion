@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+    
+<head>
+    
+  <meta charset="utf-8">
+  <title>Lectura de archivo CSV con D3.js</title>
+  <script src="https://d3js.org/d3.v6.min.js"></script>
+    
+<!-- Estilo CSS -->
+<style> 
+ .tooltip {
+  position: absolute;
+  background-color: white; 
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+</style>
+    
+</head>
+   
+
+<body>
+    
+  <center>
+    <h1>Comparativa del precio de la vivienda en Madrid y España</h1>
+  </center>
+  
+  <div id="Grafica"></div> <!-- Llamada para renderizar la grafica -->
+  <div id="tooltip" class="tooltip"></div> <!-- Necesario para mostrar informacion emergente -->
+    
+  <script>
+      
+      // Configuración del gráfico (margenes, anchura y altura)
+      const margin = {top: 50, right: 20, bottom: 20, left: 200};
+      const width = 1200 - margin.left - margin.right;
+      const height = 500 - margin.top - margin.bottom;
+      
+      // Definicion de escalas y ejes
+      const x = d3.scaleTime().range([0, width]); //Rango de la escala del eje X
+      const y = d3.scaleLinear().range([height, 0]); //Rango de la escala del eje Y
+      
+      // Formato para los valores del eje Y (dos decimales)
+      const formatValue = d3.format(".2f");
+      
+      const xAxis = d3.axisBottom(x); // Eje X en la parte inferior de la grafica
+      const yAxis = d3.axisLeft(y) // Eje Y en la parte izquierda de la grafica
+      .tickFormat(d => formatValue(d).replace(".", ",")); 
+
+      // Crear un elemento SVG para el gráfico
+      const svg = d3.select("#Grafica")
+          .append("svg")
+          .attr("width", width + margin.left + margin.right)
+          .attr("height", height + margin.top + margin.bottom)
+          .append("g") //Necesario para agrupar y manipular los elementos graficos
+          .attr("transform", `translate(${margin.left}, ${margin.top})`); //Posicion de g en svg
+
+      // Definicion de la línea de los datos de Madrid en el eje Y y las fechas en el eje X
+      const lineMadrid = d3.line()
+          .x(d => x(d.fecha))
+          .y(d => y(d.madrid));
+      
+      // Definicion de la línea de los datos de España en el eje Y y las fechas en el eje X
+      const lineEspana = d3.line()
+      .x(d => x(d.fecha))
+      .y(d => y(d.espana));
+      
+      // Formateador de fecha indicando solo mostrar el año en formato numerico
+      const formatDate = d3.timeFormat("%Y");
+
+      // Variable para mostrar la información emergente cuando se use el cursor
+      const tooltip = d3.select("#tooltip");
+
+      
+    // Función para manejar el evento mouseover
+    function mouseover() {
+      tooltip.style("opacity", 1); // Opacidad de la ventana emergente
+    }
+      
+    // Función para manejar el evento mousemove
+    function mousemove(event, d) {
+      const x0 = x.invert(d3.pointer(event)[0]); // Conversion posicion eje X en una fecha
+      const i = d3.bisector(d => d.fecha).left(d, x0, 1); //Indice del elemento cercano a la posicion X
+      const selectedData = d[i - 1]; // Selecion datos cercanos a la fecha correspondiente
+      
+      // Permite actualizar el contenido y la posicion de la ventana emergente (tooltip)
+      tooltip.html(`Fecha: ${formatDate(selectedData.fecha)} (${selectedData.periodo})<br>
+                    Precio de la vivienda: ${selectedData.madrid} €`)
+        .style("left", (event.pageX + 15) + "px") // Posicion de la ventana emergente
+        .style("top", (event.pageY - 28) + "px");
+    }
+
+    // Función para manejar el evento mouseout
+    function mouseout() {
+      tooltip.style("opacity", 0);
+    }
+
+    // Función para procesar los datos del CSV
+    function processData(row) {
+        const ano = row.ano;
+        const periodo = row.periodo;
+        const madrid = row.madrid;
+        const espana = row.espana;
+
+        return {
+            fecha: new Date(ano, (parseInt(periodo.split(" ")[1]) - 1) * 3),
+            periodo: periodo,
+            madrid: parseFloat(madrid.replace('.', '').replace(',', '.')),
+            espana: parseFloat(espana.replace('.', '').replace(',', '.'))
+        };
+    }
+
+    // Función crear una leyenda
+    function createLegend(){
+        const legend = svg.append("g").attr("class", "legend").attr("transform", "translate(" + + (width - 200) + "," + 20 + ")");
+            
+            // Leyenda de la línea madrid
+            legend.append("rect")
+                .attr("x", 0)
+                .attr("y", 0)
+                .attr("width", 20)
+                .attr("height", 2)
+                .style("fill", "steelblue");
+
+            legend.append("text")
+                .attr("x", 25)
+                .attr("y", 0)
+                .attr("dy", ".35em")
+                .text("Madrid");
+            
+            legend.append("rect")
+                .attr("x", 0)
+                .attr("y", 20)
+                .attr("width", 20)
+                .attr("height", 2)
+                .style("fill", "orange");
+
+            legend.append("text")
+                .attr("x", 25)
+                .attr("y", 20)
+                .attr("dy", ".35em")
+                .text("España");
+            }
+
+      // Cargar los datos del CSV y crear el gráfico
+      d3.dsv(';', "./Dataset_Precio_vivienda.csv", processData).then(function (data) {
+              
+            // Configurar el dominio de las escalas
+              x.domain(d3.extent(data, d => d.fecha));
+              y.domain([0, d3.max(data, d => Math.max(d.madrid, d.espana))]);
+
+          
+              // Agregar los ejes al SVG
+              svg.append("g")
+                  .attr("transform", `translate(0, ${height})`)
+                  .call(xAxis);
+                  
+              svg.append("g")
+                  .call(yAxis);
+            
+              // Añade el eje titulo al eje Y
+              svg.append("text")
+                  .attr("class", "y label")
+                  .attr("text-anchor", "start") // Alineación a la izquierda
+                  .attr("x", -370) // Mover el texto hacia la izquierda
+                  .attr("y", -60)
+                  .attr("dy", ".0em")
+                  .attr("transform", "rotate(-90)")
+                  .text("Precio de la vivienda en miles de euros (€)");
+          
+              // Agregar la linea de Madrid al SVG
+              svg.append("path")
+                  .datum(data)
+                  .attr("fill", "none")
+                  .attr("stroke", "steelblue")
+                  .attr("stroke-width", 1.5)
+                  .attr("d", lineMadrid)
+                  .on("mouseover", mouseover)
+                  .on("mousemove", mousemove)
+                  .on("mouseout", mouseout);
+          
+             // Agregar la linea de España al SVG
+             svg.append("path")
+                  .datum(data)
+                  .attr("fill", "none")
+                  .attr("stroke", "orange")
+                  .attr("stroke-width", 1.5)
+                  .attr("d", lineEspana)
+                  .on("mouseover", mouseover)
+                  .on("mousemove", mousemove)
+                  .on("mouseout", mouseout);
+             
+            //Añade un ciruculo sobre la linea para cada valor (x,y) que tenga
+             svg.selectAll("myCircles")
+                  .data(data)
+                  .enter()
+                  .append("circle")
+                  .attr("fill", "orange")
+                  .attr("stroke", "none")
+                  .attr("cx", function(d) { return x(d.fecha) })
+                  .attr("cy", function(d) { return y(d.espana) })
+                  .attr("r", 3)
+          
+             svg.selectAll("myCircles")
+                  .data(data)
+                  .enter()
+                  .append("circle")
+                  .attr("fill", "steelblue")
+                  .attr("stroke", "none")
+                  .attr("cx", function(d) { return x(d.fecha) })
+                  .attr("cy", function(d) { return y(d.madrid) })
+                  .attr("r", 3)
+          
+          // Llamada a la funcion de la leyenda
+          createLegend();
+          
+      });
+      
+  </script>
+</body>
+</html>
